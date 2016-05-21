@@ -15,8 +15,6 @@ var shouldExit = false
 // Sensor part
 
 type Sensor struct {
-	// TrigPin        int
-	// EchoPin        int
 	TrigPin  embd.DigitalPin
 	EchoPin  embd.DigitalPin
 	Code     string
@@ -25,11 +23,70 @@ type Sensor struct {
 
 var sensors = []Sensor{
 	Sensor{nil, nil, "775e77a1-d8be-4fe4-bde7-276f0f3a8f1e", false},
-	// Sensor{27, 22, "775e77a1-d8be-4fe4-bde7-276f0f3a8f1e", false},
-	// Sensor{5, 6, "775e77a1-d8be-4fe4-bde7-276f0f3a8f1e", false},
+	Sensor{nil, nil, "775e77a1-d8be-4fe4-bde7-276f0f3a8f1e", false},
+	Sensor{nil, nil, "775e77a1-d8be-4fe4-bde7-276f0f3a8f1e", false},
+}
+
+type SensorPins struct {
+	TrigPin int
+	EchoPin int
+}
+
+var sensorPins = []SensorPins{
+	SensorPins{4, 17},
+	SensorPins{27, 22},
+	SensorPins{5, 6},
 }
 
 const distLimit = 7
+
+func pulseIn(pin embd.DigitalPin, timeout int) int {
+	var myTimeout int
+
+	// for val, _ := pin.Read(); val == embd.Low && myTimeout < timeout; val, _ = pin.Read() {
+	// 	myTimeout++
+	// 	time.Sleep(1 * time.Microsecond)
+	// }
+
+	initTime := time.Now()
+
+	for {
+		val, _ := pin.Read()
+		if val == embd.High {
+			break
+		}
+
+		if time.Since(initTime).Nanoseconds() > int64(timeout)*1000 {
+			return -1
+		}
+	}
+
+	// log.Println("low=", time.Since(initTime).Nanoseconds()/1000)
+
+	startTime := time.Now() // Record time when ECHO goes high
+
+	// myTimeout = 0
+	// for val, _ := pin.Read(); val == embd.High && myTimeout < timeout; val, _ = pin.Read() {
+	// 	myTimeout++
+	// 	time.Sleep(1 * time.Microsecond)
+	// }
+
+	for {
+		val, _ := pin.Read()
+		if val == embd.Low {
+			break
+		}
+
+		if time.Since(initTime).Nanoseconds() > int64(timeout)*1000 {
+			return -1
+		}
+	}
+
+	myTimeout = int(time.Since(startTime).Nanoseconds() / 1000)
+	// log.Println("high=", myTimeout)
+
+	return myTimeout
+}
 
 func readSensor(sensor Sensor) int {
 	// digitalPin, _ := embd.NewDigitalPin(sensor.EchoPin)
@@ -51,14 +108,16 @@ func readSensor(sensor Sensor) int {
 	sensor.TrigPin.Write(embd.Low)
 
 	// pulseDuration, _ := digitalPin.TimePulse(embd.High)
-	pulseDuration, _ := sensor.EchoPin.TimePulse(embd.High)
+	// pulseDuration, _ := sensor.EchoPin.TimePulse(embd.High)
+	pulseDuration := pulseIn(sensor.EchoPin, 30000)
 
-	distance := pulseDuration.Nanoseconds() / 58000
+	// distance := pulseDuration.Nanoseconds() / 58000
+	distance := pulseDuration / 58
 
 	// digitalPin.Close()
 	time.Sleep(20 * time.Millisecond)
 
-	if distance > 255 || distance <= 0 {
+	if distance > 255 || distance < 0 {
 		return 255
 	}
 
@@ -66,20 +125,29 @@ func readSensor(sensor Sensor) int {
 }
 
 func initSensors() {
-	// for _, sensor := range sensors {
-	// 	embd.SetDirection(sensor.TrigPin, embd.Out)
-	// 	// embd.SetDirection(sensor.EchoPin, embd.In)
-	// }
+	for index, sensor := range sensorPins {
+		trigPin, _ := embd.NewDigitalPin(sensor.TrigPin)
+		echoPin, _ := embd.NewDigitalPin(sensor.EchoPin)
 
-	trigPin, _ := embd.NewDigitalPin(4)
-	echoPin, _ := embd.NewDigitalPin(17)
+		echoPin.SetDirection(embd.In)
+		echoPin.PullDown()
 
-	echoPin.SetDirection(embd.In)
-	echoPin.PullDown()
+		trigPin.SetDirection(embd.Out)
 
-	trigPin.SetDirection(embd.Out)
+		sensors[index].TrigPin, sensors[index].EchoPin = trigPin, echoPin
+	}
 
-	sensors[0].TrigPin, sensors[0].EchoPin = trigPin, echoPin
+	// trigPin, _ := embd.NewDigitalPin(4)
+	// echoPin, err := embd.NewDigitalPin(17)
+
+	// log.Println(err)
+
+	// echoPin.SetDirection(embd.In)
+	// echoPin.PullDown()
+
+	// trigPin.SetDirection(embd.Out)
+
+	// sensors[0].TrigPin, sensors[0].EchoPin = trigPin, echoPin
 }
 
 // func treatSensor(sensor Sensor) {
@@ -87,13 +155,11 @@ func initSensors() {
 // }
 
 func main() {
-	// embd.CloseGPIO()
-	// time.Sleep(500 * time.Millisecond)
-
 	go listenForStopSignals()
+
 	defer func() {
 		if r := recover(); r != nil {
-			log.Println("Prepare to close!")
+			log.Println("Prepare to close!", r)
 			embd.CloseGPIO()
 			log.Println("Error Closed!!!", r)
 		}
@@ -103,23 +169,14 @@ func main() {
 
 	initSensors()
 
-	// toggle := false
-
 	for !shouldExit {
 
-		// if toggle {
-		// 	embd.DigitalWrite(4, embd.High)
-		// 	toggle = false
-		// } else {
-		// 	embd.DigitalWrite(4, embd.Low)
-		// 	toggle = true
-		// }
-
-		dist := readSensor(sensors[0])
-		log.Println("d=", dist)
-
-		time.Sleep(500 * time.Millisecond)
-
+		for index, sensor := range sensors {
+			dist := readSensor(sensor)
+			log.Println("d[", index, "]=", dist)
+		}
+		time.Sleep(1000 * time.Millisecond)
+		log.Println("")
 	}
 
 	embd.CloseGPIO()
