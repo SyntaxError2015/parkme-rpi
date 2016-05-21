@@ -20,16 +20,16 @@ type Sensor struct {
 	Code     string
 	Occupied bool
 }
+type SensorPins struct {
+	TrigPin int
+	EchoPin int
+}
 
+//Sensor specific
 var sensors = []Sensor{
 	Sensor{nil, nil, "775e77a1-d8be-4fe4-bde7-276f0f3a8f1e", false},
 	Sensor{nil, nil, "775e77a1-d8be-4fe4-bde7-276f0f3a8f1e", false},
 	Sensor{nil, nil, "775e77a1-d8be-4fe4-bde7-276f0f3a8f1e", false},
-}
-
-type SensorPins struct {
-	TrigPin int
-	EchoPin int
 }
 
 var sensorPins = []SensorPins{
@@ -38,15 +38,10 @@ var sensorPins = []SensorPins{
 	SensorPins{5, 6},
 }
 
-const distLimit = 7
+const distLimit = 15
 
+// read the HIGH pulse from a specific pin
 func pulseIn(pin embd.DigitalPin, timeout int) int {
-	var myTimeout int
-
-	// for val, _ := pin.Read(); val == embd.Low && myTimeout < timeout; val, _ = pin.Read() {
-	// 	myTimeout++
-	// 	time.Sleep(1 * time.Microsecond)
-	// }
 
 	initTime := time.Now()
 
@@ -65,12 +60,6 @@ func pulseIn(pin embd.DigitalPin, timeout int) int {
 
 	startTime := time.Now() // Record time when ECHO goes high
 
-	// myTimeout = 0
-	// for val, _ := pin.Read(); val == embd.High && myTimeout < timeout; val, _ = pin.Read() {
-	// 	myTimeout++
-	// 	time.Sleep(1 * time.Microsecond)
-	// }
-
 	for {
 		val, _ := pin.Read()
 		if val == embd.Low {
@@ -82,39 +71,29 @@ func pulseIn(pin embd.DigitalPin, timeout int) int {
 		}
 	}
 
-	myTimeout = int(time.Since(startTime).Nanoseconds() / 1000)
+	myTimeout := int(time.Since(startTime).Nanoseconds() / 1000)
 	// log.Println("high=", myTimeout)
 
 	return myTimeout
 }
 
 func readSensor(sensor Sensor) int {
-	// digitalPin, _ := embd.NewDigitalPin(sensor.EchoPin)
-	// digitalPin.SetDirection(embd.In)
-	// digitalPin.PullDown()
 
 	time.Sleep(5 * time.Millisecond)
 
 	//Start Ranging
-	// embd.DigitalWrite(sensor.TrigPin, embd.Low)
 	sensor.TrigPin.Write(embd.Low)
 	time.Sleep(2 * time.Microsecond)
 
-	// embd.DigitalWrite(sensor.TrigPin, embd.High)
 	sensor.TrigPin.Write(embd.High)
 	time.Sleep(10 * time.Microsecond)
 
-	// embd.DigitalWrite(sensor.TrigPin, embd.Low)
 	sensor.TrigPin.Write(embd.Low)
 
-	// pulseDuration, _ := digitalPin.TimePulse(embd.High)
-	// pulseDuration, _ := sensor.EchoPin.TimePulse(embd.High)
 	pulseDuration := pulseIn(sensor.EchoPin, 30000)
 
-	// distance := pulseDuration.Nanoseconds() / 58000
 	distance := pulseDuration / 58
 
-	// digitalPin.Close()
 	time.Sleep(20 * time.Millisecond)
 
 	if distance > 255 || distance < 0 {
@@ -137,22 +116,7 @@ func initSensors() {
 		sensors[index].TrigPin, sensors[index].EchoPin = trigPin, echoPin
 	}
 
-	// trigPin, _ := embd.NewDigitalPin(4)
-	// echoPin, err := embd.NewDigitalPin(17)
-
-	// log.Println(err)
-
-	// echoPin.SetDirection(embd.In)
-	// echoPin.PullDown()
-
-	// trigPin.SetDirection(embd.Out)
-
-	// sensors[0].TrigPin, sensors[0].EchoPin = trigPin, echoPin
 }
-
-// func treatSensor(sensor Sensor) {
-
-// }
 
 func main() {
 	go listenForStopSignals()
