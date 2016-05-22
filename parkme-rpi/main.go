@@ -36,6 +36,8 @@ type Sensor struct {
 	EchoPin  embd.DigitalPin
 	Code     string
 	Occupied bool
+	X        float64
+	Y        float64
 }
 
 //SensorPins for sensor pins
@@ -46,9 +48,9 @@ type SensorPins struct {
 
 //Sensor specific
 var sensors = []Sensor{
-	Sensor{nil, nil, "5740f64ae679ffe299e6cf75", false},
-	Sensor{nil, nil, "5740f64ae679ffe299e6cf76", false},
-	Sensor{nil, nil, "5740f64ae679ffe299e6cf77", false},
+	Sensor{nil, nil, "5740f64ae679ffe299e6cf75", false, 45.754286, 21.198960},
+	Sensor{nil, nil, "5740f64ae679ffe299e6cf76", false, 45.754299, 21.199141},
+	Sensor{nil, nil, "5740f64ae679ffe299e6cf77", false, 45.754307, 21.199309},
 }
 
 var sensorPins = []SensorPins{
@@ -154,6 +156,7 @@ func constructPark() {
 		piPark.Slots = append(piPark.Slots, models.Slot{
 			ID:         bson.ObjectIdHex(sensor.Code),
 			IsOccupied: sensor.Occupied,
+			Position:   models.Point{X: sensor.X, Y: sensor.Y},
 		})
 	}
 }
@@ -182,6 +185,7 @@ func sendParkingState(sensor *Sensor) {
 			ID:         bson.ObjectIdHex(sensor.Code),
 			IsOccupied: sensor.Occupied,
 			Park:       models.Park{ID: piPark.ID},
+			Position:   models.Point{X: sensor.X, Y: sensor.Y},
 		},
 	}
 
