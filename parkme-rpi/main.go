@@ -17,6 +17,19 @@ import (
 
 var shouldExit = false
 
+//Park
+var piPark = models.Park{
+	ID:        bson.ObjectIdHex("5740f150c6abb10a0bbaee17"),
+	AppUserID: bson.ObjectIdHex("5740f150c6abb10a0bbaee18"),
+	Slots:     []models.Slot{
+	// models.Slot{
+	// 	ID: bson.ObjectIdHex("5740f64ae679ffe299e6cf75"),
+	// 	ID: bson.ObjectIdHex("5740f64ae679ffe299e6cf76"),
+	// 	ID: bson.ObjectIdHex("5740f64ae679ffe299e6cf77"),
+	// },
+	},
+}
+
 // Sensor struct
 type Sensor struct {
 	TrigPin  embd.DigitalPin
@@ -33,9 +46,9 @@ type SensorPins struct {
 
 //Sensor specific
 var sensors = []Sensor{
-	Sensor{nil, nil, "775e77a1-d8be-4fe4-bde7-276f0f3a8f1e", false},
-	Sensor{nil, nil, "97e2d498-af63-4146-b3b2-68916ffc30b2", false},
-	Sensor{nil, nil, "c835d1d6-1cc0-4a08-ace7-bcaefd4e384d", false},
+	Sensor{nil, nil, "5740f64ae679ffe299e6cf75", false},
+	Sensor{nil, nil, "5740f64ae679ffe299e6cf76", false},
+	Sensor{nil, nil, "5740f64ae679ffe299e6cf77", false},
 }
 
 var sensorPins = []SensorPins{
@@ -46,7 +59,7 @@ var sensorPins = []SensorPins{
 
 //constants
 const distLimit = 15
-const apiURL = ""
+const apiURL = "http://vpn.nbi.ninja:1234/api1/"
 
 // read the HIGH pulse from a specific pin
 func pulseIn(pin embd.DigitalPin, timeout int) int {
@@ -111,11 +124,6 @@ func readSensor(sensor Sensor) int {
 	return int(distance)
 }
 
-//Send to the server the parking slot state
-func sendParkingState(sensor *Sensor) {
-	log.Println(sensor.Code, sensor.Occupied)
-}
-
 func changeParkingState(sensor *Sensor, occupied bool) {
 	if sensor.Occupied != occupied {
 		sensor.Occupied = occupied
@@ -140,6 +148,55 @@ func initSensors() {
 }
 
 // HTTP part
+
+func constructPark() {
+	for _, sensor := range sensors {
+		piPark.Slots = append(piPark.Slots, models.Slot{
+			ID:         bson.ObjectIdHex(sensor.Code),
+			IsOccupied: sensor.Occupied,
+		})
+	}
+}
+
+func registerPark() {
+	constructPark()
+
+	serializedPark, _ := SerializeJSON(piPark)
+
+	// log.Println(string(serializedPark))
+
+	resp, err := http.Post(apiURL+"parks/Register", "application/json", bytes.NewBuffer(serializedPark))
+
+	if err != nil {
+		log.Println(resp, err)
+	}
+}
+
+//Send to the server the parking slot state
+func sendParkingState(sensor *Sensor) {
+	//log.Println(sensor.Code, sensor.Occupied)
+
+	updatedSlot := models.SlotUpdate{
+		ParkID: piPark.ID,
+		Slot: models.Slot{
+			ID:         bson.ObjectIdHex(sensor.Code),
+			IsOccupied: sensor.Occupied,
+			Park:       models.Park{ID: piPark.ID},
+		},
+	}
+
+	serializedSlot, _ := SerializeJSON(updatedSlot)
+	log.Println(string(serializedSlot))
+
+	req, err := http.NewRequest("PUT", apiURL+"slots/UpdateSlot", bytes.NewBuffer(serializedSlot))
+	client := &http.Client{}
+	resp, err := client.Do(req)
+
+	if err != nil {
+		log.Println(resp, err)
+	}
+}
+
 func test() {
 
 	var park models.Park
@@ -155,8 +212,7 @@ func test() {
 
 	log.Println(string(js))
 
-	// var jsonStr = []byte(`{"id":"park-1"}`)
-	resp, err := http.Post("http://vpn.nbi.ninja:1234/api1/parks/Register", "application/json", bytes.NewBuffer(js))
+	resp, err := http.Post(apiURL+"parks/Register", "application/json", bytes.NewBuffer(js))
 	log.Println(resp, err)
 }
 
@@ -173,11 +229,12 @@ func main() {
 		}
 	}()
 
+	//Initialize GPIO stuff & sensors
 	embd.InitGPIO()
-
 	initSensors()
 
-	test()
+	//API call to register the park on the server
+	registerPark()
 
 	for !shouldExit {
 
@@ -187,7 +244,7 @@ func main() {
 
 			changeParkingState(&sensors[index], dist < distLimit)
 		}
-		time.Sleep(1000 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		//log.Println("")
 	}
 
